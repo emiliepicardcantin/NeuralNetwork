@@ -1,2 +1,4 @@
 *.DS_Store*
 Datasets/*
+*__pycache__*
+Code/.ipynb_checkpoints/*
