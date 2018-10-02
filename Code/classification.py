@@ -231,9 +231,6 @@ def nn_model(X, Y, n_l, initialization="standard", learning_rate=0.05, num_itera
     num_examples = X.shape[0]
     num_layers = len(n_l) - 1
     num_classes = Y.shape[0]
-
-
-    assert(num_examples == Y.shape[1], "Y : "+str(Y.shape))
     
     # Initialize parameters, Inputs: "n_l". Outputs = "W and b parameters by layer".
     if initialization == "standard":
@@ -296,25 +293,32 @@ def predict(parameters, X, num_layers):
     return predictions, A_L
 
 def compute_f1_score(predictions, labels):
-    print("Predictions : "+str(predictions.shape))
-    all_positives = np.sum(predictions)
-    print("All positives : "+str(all_positives))
-    true_positives = np.dot(predictions, labels.T)
-    print("True positives : "+str(true_positives))
+    results = {
+        "positive":{
+            "predictions": np.sum(predictions),
+            "labels": np.sum(labels),
+            "true_predictions": np.sum(np.dot(predictions, labels.T)),
+            "false_predictions": np.sum(np.dot(predictions, 1-labels.T))
+        },
+        "negative": {
+            "predictions": np.sum(1 - predictions),
+            "labels": np.sum(1 - labels),
+            "true_predictions": np.sum(np.dot(1-predictions, 1-labels.T)),
+            "false_predictions": np.sum(np.dot(1-predictions, labels.T))
+        }
+    }
+    f1_score = {
+        "precision": 1.0,
+        "recall": 1.0,
+        "f1_score": 0.0
+    }
 
-    precision = 1.0
-    if all_positives > 0:
-        precision = true_positives / all_positives
-    print("Precision : "+str(precision))
+    if results["positive"]["predictions"] > 0:
+        f1_score["precision"] = results["positive"]["true_predictions"] / results["positive"]["predictions"]
 
-    false_negatives = np.dot(1-predictions, labels.T)
-    print("False negatives : "+str(false_negatives))
-    all_negatives = false_negatives + true_positives
-    print("All negatives : "+str(all_negatives))
+    if results["positive"]["labels"] > 0:
+        f1_score["recall"] = results["positive"]["true_predictions"] / results["positive"]["labels"]
 
-    recall = 1.0
-    if all_negatives > 0:
-        recall = true_positives / (false_negatives+true_positives)
-    print("Recall : "+str(recall))
+    f1_score["f1_score"] = float(2 * f1_score["precision"] * f1_score["recall"] / (f1_score["precision"] + f1_score["recall"]))
 
-    return float(2 * precision * recall / (precision + recall))
+    return results,f1_score

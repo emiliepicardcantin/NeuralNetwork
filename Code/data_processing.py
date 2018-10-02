@@ -12,19 +12,14 @@ def image_to_vector(image_path, width, height):
 def images_to_vectors(image_list, num_pixels):
     num_images = len(image_list)
     image_vectors = numpy.zeros((num_pixels*num_pixels, num_images))
-    for column in tqdm(range(num_images), desc="Image to vector ... "):
+    for column in tqdm(range(num_images), desc="Image to vector "):
         image_vectors[:,column] = image_to_vector(image_list[column], num_pixels, num_pixels)
     
     return image_vectors
 
 def write_image_vectors_to_file(image_list, num_pixels, labels, output_file):
     header = ["Label"] + ["X"+str(i) for i in range(num_pixels*num_pixels)]
-    print("Labels : "+str(len(labels)))
-    
     image_vectors = images_to_vectors(image_list, num_pixels)
-    print("Vectors : "+str(image_vectors.shape))
     examples = numpy.append([labels], image_vectors, axis=0)
-    print("Vectors with labels : "+str(examples.shape))
-
     numpy.save(output_file, examples)
-    
+    print("Examples saved : "+str(examples.shape))
