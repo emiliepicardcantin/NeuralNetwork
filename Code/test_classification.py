@@ -57,6 +57,13 @@ class TestClassification(unittest.TestCase):
         a = numpy.round(CL.softmax(z), 5)
         expected_a = numpy.round(numpy.array([[0.0474258732, 0.999088949, 0.956892745], [0.952574127, 0.0009110512, 0.04310725]]),5)
         numpy.testing.assert_array_equal(a, expected_a)
+        numpy.testing.assert_array_equal(numpy.sum(a, axis=0, keepdims=True), numpy.ones((1,3)))
+        
+    def test_one_hot_matrix(self):
+        labels = numpy.array([[0,1,2,3,1]])
+        one_hot_matrix = CL.one_hot_matrix(labels[0], 4)
+        expected_matrix = numpy.array([[1,0,0,0,0], [0,1,0,0,1], [0,0,1,0,0], [0,0,0,1,0]])
+        numpy.testing.assert_array_equal(one_hot_matrix, expected_matrix)
 
 if __name__ == '__main__':
     unittest.main()

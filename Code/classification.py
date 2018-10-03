@@ -11,6 +11,13 @@ def softmax(z):
     t_sum = np.sum(t, axis=0)
     return t / t_sum
 
+def one_hot_matrix(labels, num_classes):
+    num_examples = labels.shape[0]
+    one_hot_matrix = np.zeros((num_classes, num_examples))
+    for i, label in enumerate(labels):
+        one_hot_matrix[label,i] = 1
+    return one_hot_matrix
+
 def initialize_parameters(n_l, seed=42):
     """
         Argument:
@@ -76,7 +83,7 @@ def forward_prop_compute_z(A_prev, W, b, activation_function):
 
     return z,a
 
-def forward_propagation(X, params, num_layers):
+def forward_propagation(X, params, num_layers, last_act_fnct="sigmoid"):
     """
         Argument:
         X -- input data of size (n_l[0], m)
@@ -96,13 +103,13 @@ def forward_propagation(X, params, num_layers):
         cache["A"+str(layer)] = a
     
     # Output layer is different, using sigmoid function
-    z,A_L = forward_prop_compute_z(cache["A"+str(num_layers-1)], params["W"+str(num_layers)], params["b"+str(num_layers)], "sigmoid")
+    z,A_L = forward_prop_compute_z(cache["A"+str(num_layers-1)], params["W"+str(num_layers)], params["b"+str(num_layers)], last_act_fnct)
     cache["Z"+str(num_layers)] = z
     cache["A"+str(num_layers)] = A_L
     
     return A_L, cache
 
-def compute_cost(A_L, Y, params):
+def compute_cost(A_L, Y, params, last_act_fnct="sigmoid"):
     """
         Computes the cross-entropy cost
         
@@ -117,8 +124,11 @@ def compute_cost(A_L, Y, params):
     
     m = Y.shape[1] # number of example
     
-    # Compute the cross-entropy cost
-    cost = - (np.dot(Y, np.log(A_L).T) / m) - (np.dot(1-Y, np.log(1-A_L).T) / m)
+    if last_act_fnct == "sigmoid":
+        # Compute the cross-entropy cost
+        cost = - (np.dot(Y, np.log(A_L).T) / m) - (np.dot(1-Y, np.log(1-A_L).T) / m)
+    elif last_act_fnct == "softmax":
+        cost = - np.dot(np.reshape(Y.T, (1,-1)), np.reshape(np.log(A_L).T,(-1,1))) / m
 
     # Makes sure cost is the dimension we expect, e.g., turns [[17]] into 17 
     cost = np.asscalar(cost)
@@ -136,24 +146,11 @@ def cost_regularization(num_examples, num_layers, parameters, lambda_param):
 
     return (reg * lambda_param) / (2*num_examples)
 
-def backward_propagation_derivatives(dA, A, A_prev, m, activation_function, Z=None):
-    if activation_function == "sigmoid":
-        dZ = dA * A * (1-A)
-    elif activation_function == "tanh":
-        dZ = dA * (1 - np.square(A))
-    elif activation_function == "relu":
-        if not Z:
-            raise ValueError("The relu activation function requires Z.")
-        dZ = dA * (Z >= 0)
-    elif activation_function == "softmax":
-        dZ = A * (1 - dA)
-    else:
-        raise ValueError("This activation function is not implemented. Please choose between sigmoid, tanh, or relu.")
-    
+def backward_propagation_derivatives(dZ, A_prev, m):
     dW = np.dot(dZ, A_prev.T) / m
     db = np.sum(dZ, axis=1, keepdims=True) / m
     
-    return dZ, dW, db
+    return dW, db
 
 def backward_propagation(params, num_layers, cache, X, Y, last_act_fnct="sigmoid"):
     """
@@ -175,29 +172,31 @@ def backward_propagation(params, num_layers, cache, X, Y, last_act_fnct="sigmoid
     # Initialization of dA_L
     A_L = cache["A"+str(num_layers)]
 
-    if last_act_fnct == "sigmoid":
-        dA_L = (A_L - Y) / (A_L * (1-A_L))
-    elif last_act_fnct == "softmax":
-        dA_L = - Y / A_L
+    # Same for both sigmoid and softmax
+    dZ_L = A_L - Y
 
     # Computing dZ_L according to sigmoid actionvation function
-    dZ_L, dW_L, db_L = backward_propagation_derivatives(dA_L, A_L, cache["A"+str(num_layers-1)], m, last_act_fnct)
+    dW_L, db_L = backward_propagation_derivatives(dZ_L, cache["A"+str(num_layers-1)], m)
     grads["dZ"+str(num_layers)] = dZ_L
     grads["dW"+str(num_layers)] = dW_L
     grads["db"+str(num_layers)] = db_L
     
     for layer in range(num_layers-1, 0, -1):
         dA_layer = np.dot(params["W"+str(layer+1)].T, grads["dZ"+str(layer+1)])
-        dZ, dW, db = backward_propagation_derivatives(dA_layer, cache["A"+str(layer)], cache["A"+str(layer-1)], m, "tanh")
+        
+        dZ = dA_layer * (1 - np.square(cache["A"+str(layer)])) # tanh
+        # dZ = dA * (cache["Z"+str(layer)] >= 0) # relu
+
+        dW, db = backward_propagation_derivatives(dZ, cache["A"+str(layer-1)], m)
         grads["dZ"+str(layer)] = dZ
         grads["dW"+str(layer)] = dW
         grads["db"+str(layer)] = db
   
     return grads
 
-def update_parameters(params, grads, num_examples, num_layers, lambda_param=0.5, learning_rate = 1.2):
+def update_parameters(params, grads, num_layers, learning_rate=1.2):
     """
-        Updates parameters using the gradient descent update rule given above
+        Updates parameters using the gradient descent update rule
         
         Arguments:
         parameters -- python dictionary containing the parameters W and b by layer
@@ -209,13 +208,51 @@ def update_parameters(params, grads, num_examples, num_layers, lambda_param=0.5,
     
     # Update rule for each parameter
     for layer in range(1,num_layers+1):
-        # params["W"+str(layer)] = (1 - learning_rate*lambda_param/num_examples)*params["W"+str(layer)] - learning_rate*grads["dW"+str(layer)]
         params["W"+str(layer)] = params["W"+str(layer)] - learning_rate*grads["dW"+str(layer)]
         params["b"+str(layer)] = params["b"+str(layer)] - learning_rate*grads["db"+str(layer)]
     
     return params
 
-def nn_model(X, Y, n_l, initialization="standard", learning_rate=0.05, num_iterations=10000, print_cost=False):
+def update_parameters_adam(params, grads, num_layers, iteration, adam_params, learning_rate=1.2, beta1=0.9, beta2=0.999, epsilon=10**(-8)):
+    """
+        Updates parameters using the adam optimization rule 
+        
+        Arguments:
+        parameters -- python dictionary containing the parameters W and b by layer
+        grads -- python dictionary containing the gradients dZ, dW, db by layer
+        
+        Returns:
+        parameters -- python dictionary containing the updated parameters by layer
+    """
+    
+    # Update rule for each parameter
+    for layer in range(1,num_layers+1):
+        # Moment
+        adam_params["VdW"+str(layer)] = beta1*adam_params["VdW"+str(layer)] + (1-beta1)*grads["dW"+str(layer)]
+        adam_params["Vdb"+str(layer)] = beta1*adam_params["Vdb"+str(layer)] + (1-beta1)*grads["db"+str(layer)]
+
+        # RMS propagation
+        adam_params["SdW"+str(layer)] = beta2*adam_params["SdW"+str(layer)] + (1-beta2)*(grads["dW"+str(layer)]**2)
+        adam_params["Sdb"+str(layer)] = beta2*adam_params["Sdb"+str(layer)] + (1-beta2)*(grads["db"+str(layer)]**2)
+
+        # Correction
+        VdW_corr = adam_params["VdW"+str(layer)] / (1 - beta1**iteration)
+        Vdb_corr = adam_params["Vdb"+str(layer)] / (1 - beta1**iteration)
+        SdW_corr = adam_params["SdW"+str(layer)] / (1 - beta2**iteration)
+        Sdb_corr = adam_params["Sdb"+str(layer)] / (1 - beta2**iteration)
+
+        # Parameters update
+        params["W"+str(layer)] = params["W"+str(layer)] - learning_rate*VdW_corr / np.sqrt(SdW_corr) + epsilon
+        params["b"+str(layer)] = params["b"+str(layer)] - learning_rate*Vdb_corr / np.sqrt(Sdb_corr) + epsilon
+    
+    return params
+
+def nn_model(
+    X, Y, n_l, 
+    initialization="standard", opt_fnct="standard",
+    learning_rate=0.05, num_iterations=10000, print_cost=False,
+    beta1=0.9, beta2=0.999, epsilon=10**(-8)
+):
     """
         Arguments:
         X -- dataset of shape (number of examples, number of features)
@@ -240,35 +277,54 @@ def nn_model(X, Y, n_l, initialization="standard", learning_rate=0.05, num_itera
     else:
         raise ValueError("This type of initialization is not implemented, please choose between standard and tanh.")
     
+    if opt_fnct == "adam":
+        adam_params = {}
+        for layer in range(1, num_layers+1):
+            adam_params["VdW"+str(layer)] = 0
+            adam_params["Vdb"+str(layer)] = 0
+            adam_params["SdW"+str(layer)] = 0
+            adam_params["Sdb"+str(layer)] = 0
+            
+    if num_classes > 1:
+        last_act_fnct = "softmax"
+    else :
+        last_act_fnct = "sigmoid"
+        
     # Loop (gradient descent)
     costs = [None for i in range(num_iterations)]
     
     for i in range(num_iterations):
         # Forward propagation. Inputs: "X, parameters". Outputs: "A_L, cache".
-        A_L, cache = forward_propagation(X, parameters, num_layers)
-        
+        A_L, cache = forward_propagation(X, parameters, num_layers, last_act_fnct=last_act_fnct)
+
         # Cost function. Inputs: "A_L, Y, parameters". Outputs: "cost".
-        cost = compute_cost(A_L, Y, parameters) #+ cost_regularization(num_examples,num_layers,parameters,lambda_param=0.5)
+        cost = compute_cost(A_L, Y, parameters, last_act_fnct=last_act_fnct) #+ cost_regularization(num_examples,num_layers,parameters,lambda_param=0.5)
         costs[i] = cost
-    
+        
         # Backpropagation. Inputs: "parameters, cache, X, Y". Outputs: "grads".
-        if num_classes > 1:
-            last_act_fnct = "softmax"
-        else :
-            last_act_fnct = "sigmoid"
         grads = backward_propagation(parameters, num_layers, cache, X, Y, last_act_fnct=last_act_fnct)
     
         # Gradient descent parameter update. Inputs: "parameters, grads". Outputs: "parameters".
-        parameters = update_parameters(parameters, grads, num_examples, num_layers, lambda_param=0.5, learning_rate=learning_rate)
+        if opt_fnct == "adam":
+            parameters = update_parameters_adam(
+                parameters, grads, num_layers, i+1, adam_params,
+                learning_rate=learning_rate, beta1=beta1, beta2=beta2, epsilon=epsilon
+            )
+        else:
+            parameters = update_parameters(parameters, grads, num_layers, learning_rate=learning_rate)
         
         if print_cost and i % 1000 == 0:
             print("Cost after iteration %i: %f" %(i+1, cost))
+            # print(parameters)
+            # print(cache)
+            # print(grads)
+            # print("\n\n")
     
     print("Cost after all iterations : "+str(cost)+"\n")
 
     return parameters, costs
 
-def predict(parameters, X, num_layers):
+def predict(parameters, X, num_layers, last_act_fnct="sigmoid"):
     """
         Using the learned parameters, predicts a class for each example in X
         
@@ -281,15 +337,13 @@ def predict(parameters, X, num_layers):
     """
     
     # Computes probabilities using forward propagation, and classifies to 0/1 using 0.5 as the threshold.
-    A_L, cache = forward_propagation(X, parameters, num_layers)
-    # print("A_L : \n"+str(A_L))
-    # print("A_L : "+str(A_L.shape))
-    # print("Cached As : "+str([layer["A"].shape for layer in cache]))
-    # print(np.sum(A_L == A_L[0][0]))
-    # print(A_L.shape)
-    # print(np.sum(A_L != A_L[0][0]))
-    predictions = (A_L > 0.5)
-    
+    A_L, cache = forward_propagation(X, parameters, num_layers, last_act_fnct=last_act_fnct)
+
+    if last_act_fnct == "sigmoid": 
+        predictions = (A_L > 0.5)
+    elif last_act_fnct == "softmax":
+        predictions = np.argmax(A_L, axis=0)
+
     return predictions, A_L
 
 def compute_f1_score(predictions, labels):
@@ -319,6 +373,20 @@ def compute_f1_score(predictions, labels):
     if results["positive"]["labels"] > 0:
         f1_score["recall"] = results["positive"]["true_predictions"] / results["positive"]["labels"]
 
-    f1_score["f1_score"] = float(2 * f1_score["precision"] * f1_score["recall"] / (f1_score["precision"] + f1_score["recall"]))
+    if f1_score["precision"] > 0.0 and f1_score["recall"] > 0.0:
+        f1_score["f1_score"] = float(2 * f1_score["precision"] * f1_score["recall"] / (f1_score["precision"] + f1_score["recall"]))
 
     return results,f1_score
+
+def compute_f1_score_multi_class(predictions, labels, num_classes):
+    results = [None for c in range(num_classes)]
+    f1_scores = [None for c in range(num_classes)]
+
+    for c in range(num_classes):
+        r,f1 = compute_f1_score((predictions == c)*1, (labels == c)*1)
+        results[c] = r
+        f1_scores[c] = f1
+        print("Class "+str(c)+" : "+str(f1))
+
+
+    return results, f1_scores
