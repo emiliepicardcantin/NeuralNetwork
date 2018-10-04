@@ -245,10 +245,11 @@ def update_parameters_adam(params, grads, num_layers, iteration, adam_params, le
         params["W"+str(layer)] = params["W"+str(layer)] - learning_rate*VdW_corr / np.sqrt(SdW_corr) + epsilon
         params["b"+str(layer)] = params["b"+str(layer)] - learning_rate*Vdb_corr / np.sqrt(Sdb_corr) + epsilon
     
-    return params
+    return params, adam_params
 
 def nn_model(
     X, Y, n_l, 
+    previous_parameters=None,
     initialization="standard", opt_fnct="standard",
     learning_rate=0.05, num_iterations=10000, print_cost=False,
     beta1=0.9, beta2=0.999, epsilon=10**(-8)
@@ -270,20 +271,27 @@ def nn_model(
     num_classes = Y.shape[0]
     
     # Initialize parameters, Inputs: "n_l". Outputs = "W and b parameters by layer".
-    if initialization == "standard":
-        parameters = initialize_parameters(n_l)
-    elif initialization == "xavier":
-        parameters = xavier_initialization(n_l)
+    if not previous_parameters :
+        if initialization == "standard":
+            parameters = initialize_parameters(n_l)
+        elif initialization == "xavier":
+            parameters = xavier_initialization(n_l)
+        else:
+            raise ValueError("This type of initialization is not implemented, please choose between standard and tanh.")
+
+        if opt_fnct == "adam":
+            adam_params = {}
+            for layer in range(1, num_layers+1):
+                adam_params["VdW"+str(layer)] = 0
+                adam_params["Vdb"+str(layer)] = 0
+                adam_params["SdW"+str(layer)] = 0
+                adam_params["Sdb"+str(layer)] = 0
     else:
-        raise ValueError("This type of initialization is not implemented, please choose between standard and tanh.")
-    
-    if opt_fnct == "adam":
-        adam_params = {}
-        for layer in range(1, num_layers+1):
-            adam_params["VdW"+str(layer)] = 0
-            adam_params["Vdb"+str(layer)] = 0
-            adam_params["SdW"+str(layer)] = 0
-            adam_params["Sdb"+str(layer)] = 0
+        print("Continuing from previous parameters.")
+        parameters = previous_parameters["parameters"]
+
+        if opt_fnct == "adam":
+            adam_params = previous_parameters["adam_params"]
             
     if num_classes > 1:
         last_act_fnct = "softmax"
@@ -306,7 +314,7 @@ def nn_model(
     
         # Gradient descent parameter update. Inputs: "parameters, grads". Outputs: "parameters".
         if opt_fnct == "adam":
-            parameters = update_parameters_adam(
+            parameters, adam_params = update_parameters_adam(
                 parameters, grads, num_layers, i+1, adam_params,
                 learning_rate=learning_rate, beta1=beta1, beta2=beta2, epsilon=epsilon
             )
@@ -322,7 +330,10 @@ def nn_model(
     
     print("Cost after all iterations : "+str(cost)+"\n")
 
-    return parameters, costs
+    if opt_fnct == "adam":
+        return {"parameters": parameters, "adam_params":adam_params}, costs
+    else:
+        return {"parameters":parameters}, costs
 
 def predict(parameters, X, num_layers, last_act_fnct="sigmoid"):
     """
@@ -386,7 +397,7 @@ def compute_f1_score_multi_class(predictions, labels, num_classes):
         r,f1 = compute_f1_score((predictions == c)*1, (labels == c)*1)
         results[c] = r
         f1_scores[c] = f1
-        print("Class "+str(c)+" : "+str(f1))
+        # print("Class "+str(c)+" : "+str(f1))
 
 
     return results, f1_scores
