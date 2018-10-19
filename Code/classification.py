@@ -295,9 +295,9 @@ def nn_model(
     # Initialize parameters, Inputs: "n_l". Outputs = "W and b parameters by layer".
     if not previous_parameters :
         if initialization == "standard":
-            parameters = initialize_parameters(n_l)
+            parameters = parameters_init(n_l)
         elif initialization == "xavier":
-            parameters = xavier_initialization(n_l)
+            parameters = parameters_xavier_init(n_l)
         else:
             raise ValueError("This type of initialization is not implemented, please choose between standard and tanh.")
 
