@@ -1,31 +1,55 @@
+# -------------------------------------------------------------------------------------------------------------- #
+# Mathematics
 import numpy as np
 import math
-from tqdm import tqdm
 from scipy.special import expit
+
+# Visualization 
 import matplotlib.pyplot as plt
 
+# Debug and performance
+from tqdm import tqdm
 from time import time
-
+# -------------------------------------------------------------------------------------------------------------- #
+# Matrix manipulations
+def one_hot_matrix(indices, max_index):
+    """
+        Argument:
+        max_index -- value of the maximum index
+        indices -- numpy array of shape (m,) containing values smaller than max_index
+        
+        Returns:
+        ohm -- numpy ndarray of shape (max_index, m) where ohm[i,j] = 1 if indices[j] = i
+    """
+    one_hot_matrix = np.zeros((max_index, indices.shape[0]))
+    for i, val in enumerate(indices):
+        one_hot_matrix[val,i] = 1
+    return one_hot_matrix
+# -------------------------------------------------------------------------------------------------------------- #
+# Activation functions
 def softmax(z):
+    """
+        Argument:
+        z -- numpy 2D array of shape (n,m)
+        
+        Returns:
+        normalized numpy 2D darray of shape (n, m) 
+    """
     t = np.exp(z)
     t_sum = np.sum(t, axis=0)
     return t / t_sum
-
-def one_hot_matrix(labels, num_classes):
-    num_examples = labels.shape[0]
-    one_hot_matrix = np.zeros((num_classes, num_examples))
-    for i, label in enumerate(labels):
-        one_hot_matrix[label,i] = 1
-    return one_hot_matrix
-
-def initialize_parameters(n_l, seed=42):
+# -------------------------------------------------------------------------------------------------------------- #
+# Parameter initialization
+def parameters_init(n_l, mu=0, sigma=0.01):
     """
         Argument:
         n_l -- sizes of the layers (array)
+        mu  -- mean to use for the standard normal distribution random sampling
+        sigma -- std deviation to use for the standard normal distribution random sampling
         
         Note:
-        n_l[0] is the size of the input
-        n_l[-1] is the size of the output
+        n_l[0] is the size of the input layer
+        n_l[-1] is the size of the output layer
         
         Returns:
         parameters -- python dictionary containing the parameters W and b of each layer in a dictionary:
@@ -33,55 +57,51 @@ def initialize_parameters(n_l, seed=42):
             bi -- bias vector of layer i of shape (n_l[i], 1)
     """
 
-    np.random.seed(seed)
-    
-    num_layers = len(n_l) - 1
     params = {}
-    for i in range(1, num_layers+1):
-        params["W"+str(i)] = np.random.randn(n_l[i], n_l[i-1])*0.01
+    for i in range(1, len(n_l)):
+        params["W"+str(i)] = np.random.randn(n_l[i], n_l[i-1]) * sigma
         params["b"+str(i)] = np.zeros((n_l[i], 1))
     
     return params  
 
-def xavier_initialization(n_l, seed=42):
+def parameters_xavier_init(n_l):
     """
         Argument:
         n_l -- sizes of the layers (array)
         
         Note:
-        n_l[0] is the size of the input
-        n_l[-1] is the size of the output
+        n_l[0] is the size of the input layer
+        n_l[-1] is the size of the output layer
         
         Returns:
         parameters -- python dictionary containing the parameters W and b of each layer in a dictionary:
             Wi -- weight matrix of layer i of shape (n_l[i], n_l[i-1])
             bi -- bias vector of layer i of shape (n_l[i], 1)
     """
-
-    np.random.seed(seed)
-    
-    num_layers = len(n_l) - 1
     params = {}
-    for i in range(1, num_layers+1):
+    for i in range(1, len(n_l)):
         params["W"+str(i)] = np.random.randn(n_l[i], n_l[i-1]) * np.sqrt(1 / n_l[i-1])
         params["b"+str(i)] = np.zeros((n_l[i], 1))
     
     return params  
+# -------------------------------------------------------------------------------------------------------------- #
+# Forward propagation
+def forward_prop_compute_Z(A_prev, W, b):
+    return np.dot(W, A_prev) + b
 
-def forward_prop_compute_z(A_prev, W, b, activation_function):
-    z = np.dot(W, A_prev) + b
+def forward_prop_compute_A(Z, activation_function):
     if activation_function == "tanh":
-        a = np.tanh(z)
+        A = np.tanh(Z)
     elif activation_function == "sigmoid":
-        a = expit(z)
+        A = expit(Z)
     elif activation_function == "relu":
-        a = np.maximum(z, 0)
+        A = np.maximum(Z, 0)
     elif activation_function == "softmax":
-        a = softmax(z)
+        A = softmax(Z)
     else:
         raise ValueError("The activation function "+activation_function+" is not implemented. Choose between tanh and sigmoid.")
 
-    return z,a
+    return A
 
 def forward_propagation(X, params, num_layers, last_act_fnct="sigmoid"):
     """
@@ -98,13 +118,15 @@ def forward_propagation(X, params, num_layers, last_act_fnct="sigmoid"):
     
     # Hidden layers, using tanh activation function
     for layer in range(1,num_layers):   
-        z,a = forward_prop_compute_z(cache["A"+str(layer-1)], params["W"+str(layer)], params["b"+str(layer)], "tanh")
-        cache["Z"+str(layer)] = z
-        cache["A"+str(layer)] = a
+        Z = forward_prop_compute_Z(cache["A"+str(layer-1)], params["W"+str(layer)], params["b"+str(layer)])
+        A = forward_prop_compute_A(Z, "tanh")
+        cache["Z"+str(layer)] = Z
+        cache["A"+str(layer)] = A
     
     # Output layer is different, using sigmoid function
-    z,A_L = forward_prop_compute_z(cache["A"+str(num_layers-1)], params["W"+str(num_layers)], params["b"+str(num_layers)], last_act_fnct)
-    cache["Z"+str(num_layers)] = z
+    Z = forward_prop_compute_Z(cache["A"+str(num_layers-1)], params["W"+str(num_layers)], params["b"+str(num_layers)])
+    A_L = forward_prop_compute_A(Z, last_act_fnct)
+    cache["Z"+str(num_layers)] = Z
     cache["A"+str(num_layers)] = A_L
     
     return A_L, cache
@@ -253,7 +275,7 @@ def nn_model(
     initialization="standard", opt_fnct="standard",
     learning_rate=0.05, num_iterations=10000, print_cost=False,
     beta1=0.9, beta2=0.999, epsilon=10**(-8)
-):
+    ):
     """
         Arguments:
         X -- dataset of shape (number of examples, number of features)
