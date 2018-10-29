@@ -5,3 +5,4 @@ Code/.ipynb_checkpoints/*
 *.aux
 *.synctex.gz
 Notes/*.log
+Notes/*.pdf
