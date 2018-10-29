@@ -1,0 +1,49 @@
+Poor results can stem from different problems.
+It is useful to identify what type of poor results we have before trying solutions.
+Here is a summary.
+
+\begin{figure}[h]
+	\centering
+	\renewcommand{\arraystretch}{1.5}
+	\begin{tabular}{ll}
+		\hline
+		\multicolumn{2}{c}{Human level error} \\\hline
+		Avoidable bias & 
+		\begin{minipage}{0.85\textwidth}
+			\begin{itemize}
+				\item Train bigger model (more layers, more hidden units, etc.) 
+				\item Train longer
+				\item Better optimization algorithm (momentum, RMSprop, Adam)
+				\item Neural Network architecture (activation functions, RNN, CNN, etc.)
+				\item Hyperparameters search
+			\end{itemize}
+		\end{minipage}
+		\\ \hline
+		\multicolumn{2}{c}{Training set error} \\ \hline
+		Variance & 
+		\begin{minipage}{0.85\textwidth}
+			\begin{itemize}
+				\item More data (data augmentation) 
+				\item Regularization
+				\item Neural network architecture
+				\item Hyperparameters search
+			\end{itemize}
+		\end{minipage}
+		\\ \hline
+		\multicolumn{2}{c}{Development set error } \\ \hline
+	\end{tabular}
+\end{figure}
+
+When the algorithm requires more data but we do not have more data on hand, there are still a few solutions we can try.
+
+\begin{enumerate}
+	\item Artificial data synthesis \\
+	For example, we can create audio files with background noise by adding random background noises to our audio tracks.
+	Note that the added noise should be as random as possible to avoid overfitting.
+	
+	\item Transfert learning \\
+	For example, if there is a training set of 1 000 000 animal images, we can train on those images to
+	learn a lot on image classification.
+	Then, we can learn and tune using our target dataset, 100 images of radiology diagnosis for instances.
+	Sometimes, we add some layers at the already trained neural network for the new information.
+\end{enumerate}

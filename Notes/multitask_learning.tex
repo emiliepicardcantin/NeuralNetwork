@@ -1,0 +1,23 @@
+The difference between multi-class classification and multi-task learning is that the outout vector $y\in\{0,1\}^{C\times1}$
+(where $C$ is the number of classes in both cases) only has one non null entry for the multi-class classification
+while it can have more than one for the multi-task learning problem.
+One application is the detection of multiple objects in a picture.
+
+Let $Y^{(i)}_j$ be the $j$-th composant associated to class $j$ for the $i$-th example in the dataset.
+
+\begin{align}
+	\mathcal{L}(Y^{(i)}_j,\hat{Y}^{(i)}_j) &= -Y^{(i)}_j \log(\hat{Y}^{(i)}_j) - (1-Y^{(i)}_j) \log(1 - \hat{Y}^{(i)}_j) \\
+	J(Y,\hat{Y}) &= \frac{1}{m} \sum_{i=1}^{m} \sum_{j=1}^{C} \mathcal{L}(Y^{(i)}_j,\hat{Y}^{(i)}_j)
+\end{align}
+
+It might take a lot of time to label examples and some information might be missing from the dataset.
+This is fine as long as we can clearly identify which information is missing.
+For example, $y = [0, 1, ?, ?]^T$ means that the first item is not present, the second is present, 
+and we ignore the answer for the last two items.
+The cost function needs to be adapted in this situation so we only sum over the information we know.
+
+\begin{align}
+J(Y,\hat{Y}) &= \frac{1}{m} \sum_{i=1}^{m} \sum_{
+	\substack{ j\in\{1,\dots,C\}\\ Y^{(i)}_j\in\{0,1\} }
+	} \mathcal{L}(Y^{(i)}_j,\hat{Y}^{(i)}_j)
+\end{align}

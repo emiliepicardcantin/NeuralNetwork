@@ -2,3 +2,6 @@
 Datasets/*
 *__pycache__*
 Code/.ipynb_checkpoints/*
+*.aux
+*.synctex.gz
+Notes/*.log

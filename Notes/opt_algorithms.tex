@@ -1,0 +1,49 @@
+\subsection{Gradient descent with momentum}
+	Let $\alpha$ and $\beta$ be two fixed hyperparameters.
+	For each hidden layer $i$, we initialize $V_{dW^{[i]}}=0$ and $V_{db^{[i]}}=0$.
+	
+	Then, at each epoch we update  $V_{dW^{[i]}}$, $V_{db^{[i]}}$, $dW^{[i]}$, and $db^{[i]}$ as follows.
+	
+	\begin{align}
+		V_{dW^{[i]}} = \beta V_{dW^{[i]}} + (1-\beta) dW^{[i]}\\
+		V_{db^{[i]}} = \beta V_{db^{[i]}} + (1-\beta) db^{[i]}\\
+		W^{[i]} = W^{[i]} - \alpha V_{dW^{[i]}} \\
+		b^{[i]} = b^{[i]} - \alpha V_{db^{[i]}} 
+	\end{align}
+
+\subsection{Gradient descent with RMS prop}
+	Let $\alpha$ and $\beta$ be two fixed hyperparameters.
+	Let $\epsilon=10^{-8}$.
+	For each hidden layer $i$, we initialize $S_{dW^{[i]}}=0$ and $S_{db^{[i]}}=0$.
+	
+	Then, at each epoch we update  $S_{dW^{[i]}}$, $S_{db^{[i]}}$, $dW^{[i]}$, and $db^{[i]}$ as follows.
+	
+	\begin{align}
+	S_{dW^{[i]}} = \beta S_{dW^{[i]}} + (1-\beta) (dW^{[i]})^2\\
+	S_{db^{[i]}} = \beta S_{db^{[i]}} + (1-\beta) (db^{[i]})^2\\
+	W^{[i]} = W^{[i]} - \alpha \frac{dW^{[i]}}{\sqrt{S_{dW^{[i]}}}+\epsilon} \\
+	b^{[i]} = b^{[i]} - \alpha \frac{db^{[i]}}{\sqrt{S_{db^{[i]}}}+\epsilon}
+	\end{align}
+
+\subsection{Adam optimization algorithm}
+	Let $\alpha$, $\beta_1$, and $\beta_2$ be three fixed hyperparameters.
+	Let $\epsilon=10^{-8}$.
+	For each hidden layer $i$, we initialize $V_{dW^{[i]}}=0$, $V_{db^{[i]}}=0$, $S_{dW^{[i]}}=0$, and $S_{db^{[i]}}=0$.
+	
+	At each epoch $t$, we update  $V_{dW^{[i]}}$, $V_{db^{[i]}}$, $S_{dW^{[i]}}$, $S_{db^{[i]}}$, $dW^{[i]}$, and $db^{[i]}$ as follows.
+	
+	\begin{align}
+		V_{dW^{[i]}} = \beta_1 V_{dW^{[i]}} + (1-\beta_1) dW^{[i]}\\
+		V_{db^{[i]}} = \beta_1 V_{db^{[i]}} + (1-\beta_1) db^{[i]}\\
+		S_{dW^{[i]}} = \beta_2 S_{dW^{[i]}} + (1-\beta_2) (dW^{[i]})^2\\
+		S_{db^{[i]}} = \beta_2 S_{db^{[i]}} + (1-\beta_2) (db^{[i]})^2\\
+		V_{dW^{[i]}}^{corr} = \frac{V_{dW^{[i]}}}{1 - \beta_1^t} \\ 
+		V_{db^{[i]}}^{corr} = \frac{V_{db^{[i]}}}{1 - \beta_1^t} \\ 
+		S_{dW^{[i]}}^{corr} = \frac{S_{dW^{[i]}}}{1 - \beta_2^t} \\
+		S_{db^{[i]}}^{corr} = \frac{S_{db^{[i]}}}{1 - \beta_2^t} \\
+		W^{[i]} = W^{[i]} - \alpha \frac{V_{dW^{[i]}}^{corr} }{\sqrt{S_{dW^{[i]}}^{corr} }+\epsilon} \\
+		b^{[i]} = b^{[i]} - \alpha \frac{V_{db^{[i]}}^{corr} }{\sqrt{S_{db^{[i]}}^{corr} }+\epsilon} 
+	\end{align}
+	
+	Usually, we set $\beta_1=0.9$ and $\beta_2=0.999$.
+	Note that $\epsilon$ can also be an hyperparameter.
