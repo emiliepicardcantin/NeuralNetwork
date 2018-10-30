@@ -22,6 +22,11 @@ class TestActivationFunctions(unittest.TestCase):
         np.testing.assert_array_equal(a, expected_a)
         np.testing.assert_array_equal(np.sum(a, axis=0, keepdims=True), np.ones((1,3)))
 
+    def test_softmax_with_nan(self):
+        z = np.array([np.full(3,-np.infty), np.full(3,-np.infty)])
+        a = np.round(CL.softmax(z), 5)
+        print(a)
+
 class TestParameterInitialization(unittest.TestCase):
     def test_parameters_init(self):
         params = CL.parameters_init([2, 3, 3, 1])

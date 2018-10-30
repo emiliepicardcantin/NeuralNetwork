@@ -10,6 +10,39 @@ import matplotlib.pyplot as plt
 # Debug and performance
 from tqdm import tqdm
 from time import time
+
+NEG_INF = -1.79769313e+308
+
+def normalizing_features(X_train, X_test):
+    num_examples = X_train.shape[1]
+    
+    mean_by_feature = np.sum(X_train, axis=1, keepdims=True) / num_examples
+    std_deviation = np.sum(X_train**2, axis=1, keepdims=True) / num_examples
+
+    X_train = (X_train - mean_by_feature) / std_deviation
+    X_test = (X_test - mean_by_feature) / std_deviation
+
+    return X_train, X_test
+
+# -------------------------------------------------------------------------------------------------------------- #
+# Gradient manipulations
+def clip_gradients(gradients, max_value=1):
+    '''
+    Clips the gradients' values between -max_value and max_value.
+    
+    Arguments:
+    gradients -- a dictionary containing the gradients "dW", "db"
+    num_layers -- number of hidden layers in the neural network
+    max_value -- everything above this number is set to this number, and everything less than -max_value is set to -max_value
+    
+    Returns: 
+    gradients -- a dictionary with the clipped gradients.
+    '''
+
+    for gradient_name in gradients:
+        gradients[gradient_name] = np.clip(gradients[gradient_name], -max_value, max_value)
+    
+    return gradients
 # -------------------------------------------------------------------------------------------------------------- #
 # Matrix manipulations
 def one_hot_matrix(indices, max_index):
@@ -60,6 +93,27 @@ def parameters_init(n_l, mu=0, sigma=0.01):
     params = {}
     for i in range(1, len(n_l)):
         params["W"+str(i)] = np.random.randn(n_l[i], n_l[i-1]) * sigma
+        params["b"+str(i)] = np.zeros((n_l[i], 1))
+    
+    return params  
+
+def parameters_relu_init(n_l):
+    """
+        Argument:
+        n_l -- sizes of the layers (array)
+        
+        Note:
+        n_l[0] is the size of the input layer
+        n_l[-1] is the size of the output layer
+        
+        Returns:
+        parameters -- python dictionary containing the parameters W and b of each layer in a dictionary:
+            Wi -- weight matrix of layer i of shape (n_l[i], n_l[i-1])
+            bi -- bias vector of layer i of shape (n_l[i], 1)
+    """
+    params = {}
+    for i in range(1, len(n_l)):
+        params["W"+str(i)] = np.random.randn(n_l[i], n_l[i-1]) * np.sqrt(2 / n_l[i-1])
         params["b"+str(i)] = np.zeros((n_l[i], 1))
     
     return params  
@@ -119,7 +173,8 @@ def forward_propagation(X, params, num_layers, last_act_fnct="sigmoid"):
     # Hidden layers, using tanh activation function
     for layer in range(1,num_layers):   
         Z = forward_prop_compute_Z(cache["A"+str(layer-1)], params["W"+str(layer)], params["b"+str(layer)])
-        A = forward_prop_compute_A(Z, "tanh")
+        # A = forward_prop_compute_A(Z, "tanh")
+        A = forward_prop_compute_A(Z, "relu")
         cache["Z"+str(layer)] = Z
         cache["A"+str(layer)] = A
     
@@ -144,13 +199,16 @@ def compute_cost(A_L, Y, params, last_act_fnct="sigmoid"):
         cost -- cross-entropy cost
     """
     
-    m = Y.shape[1] # number of example
+    m = Y.shape[1] # number of examples
     
     if last_act_fnct == "sigmoid":
         # Compute the cross-entropy cost
         cost = - (np.dot(Y, np.log(A_L).T) / m) - (np.dot(1-Y, np.log(1-A_L).T) / m)
     elif last_act_fnct == "softmax":
-        cost = - np.dot(np.reshape(Y.T, (1,-1)), np.reshape(np.log(A_L).T,(-1,1))) / m
+        t = np.log(A_L)
+        t[t==-np.inf] = NEG_INF
+        cost = -1 * np.sum(Y * t) / m
+        # cost = - np.dot(np.reshape(Y.T, (1,-1)), np.reshape(np.log(A_L).T,(-1,1))) / m
 
     # Makes sure cost is the dimension we expect, e.g., turns [[17]] into 17 
     cost = np.asscalar(cost)
@@ -158,15 +216,19 @@ def compute_cost(A_L, Y, params, last_act_fnct="sigmoid"):
     
     return cost
 
-def cost_regularization(num_examples, num_layers, parameters, lambda_param):
+def l2_regularization(num_examples, num_layers, parameters, lambda_param, learning_rate):
     reg = 0
-    for layer in range(1,num_layers+1):
-        l2_norm = np.square(parameters["W"+str(layer)])
-        l2_norm = np.sum(l2_norm, axis=0)
-        l2_norm = np.sum(l2_norm)
-        reg += l2_norm
+    param_reg = {}
 
-    return (reg * lambda_param) / (2*num_examples)
+    coeff = (learning_rate*lambda_param/num_examples)
+    
+    for layer in range(1,num_layers+1):
+        reg += np.linalg.norm(parameters["W"+str(layer)]) ** 2
+        param_reg["W"+str(layer)] = coeff * parameters["W"+str(layer)]
+
+    cost_reg = (reg * lambda_param) / (2*num_examples)
+
+    return cost_reg, param_reg
 
 def backward_propagation_derivatives(dZ, A_prev, m):
     dW = np.dot(dZ, A_prev.T) / m
@@ -206,8 +268,8 @@ def backward_propagation(params, num_layers, cache, X, Y, last_act_fnct="sigmoid
     for layer in range(num_layers-1, 0, -1):
         dA_layer = np.dot(params["W"+str(layer+1)].T, grads["dZ"+str(layer+1)])
         
-        dZ = dA_layer * (1 - np.square(cache["A"+str(layer)])) # tanh
-        # dZ = dA * (cache["Z"+str(layer)] >= 0) # relu
+        # dZ = dA_layer * (1 - np.square(cache["A"+str(layer)])) # tanh
+        dZ = dA_layer * ((cache["Z"+str(layer)] >= 0) * 1) # relu
 
         dW, db = backward_propagation_derivatives(dZ, cache["A"+str(layer-1)], m)
         grads["dZ"+str(layer)] = dZ
@@ -264,8 +326,8 @@ def update_parameters_adam(params, grads, num_layers, iteration, adam_params, le
         Sdb_corr = adam_params["Sdb"+str(layer)] / (1 - beta2**iteration)
 
         # Parameters update
-        params["W"+str(layer)] = params["W"+str(layer)] - learning_rate*VdW_corr / np.sqrt(SdW_corr) + epsilon
-        params["b"+str(layer)] = params["b"+str(layer)] - learning_rate*Vdb_corr / np.sqrt(Sdb_corr) + epsilon
+        params["W"+str(layer)] = params["W"+str(layer)] - learning_rate*VdW_corr / (np.sqrt(SdW_corr) + epsilon)
+        params["b"+str(layer)] = params["b"+str(layer)] - learning_rate*Vdb_corr / (np.sqrt(Sdb_corr) + epsilon)
     
     return params, adam_params
 
@@ -273,8 +335,9 @@ def nn_model(
     X, Y, n_l, 
     previous_parameters=None,
     initialization="standard", opt_fnct="standard",
-    learning_rate=0.05, num_iterations=10000, print_cost=False,
-    beta1=0.9, beta2=0.999, epsilon=10**(-8)
+    learning_rate=0.05, lambda_param=0.05, num_iterations=10000, print_cost=None,
+    beta1=0.9, beta2=0.999, epsilon=10**(-8),
+    model_file=None
     ):
     """
         Arguments:
@@ -288,8 +351,8 @@ def nn_model(
         parameters -- parameters learnt by the model. They can then be used to predict.
     """
 
-    num_examples = X.shape[0]
     num_layers = len(n_l) - 1
+    num_examples = X.shape[1]
     num_classes = Y.shape[0]
     
     # Initialize parameters, Inputs: "n_l". Outputs = "W and b parameters by layer".
@@ -298,6 +361,8 @@ def nn_model(
             parameters = parameters_init(n_l)
         elif initialization == "xavier":
             parameters = parameters_xavier_init(n_l)
+        elif initialization == "relu":
+            parameters = parameters_relu_init(n_l)
         else:
             raise ValueError("This type of initialization is not implemented, please choose between standard and tanh.")
 
@@ -322,17 +387,19 @@ def nn_model(
         
     # Loop (gradient descent)
     costs = [None for i in range(num_iterations)]
+    cost_is_nan = False
     
     for i in range(num_iterations):
         # Forward propagation. Inputs: "X, parameters". Outputs: "A_L, cache".
         A_L, cache = forward_propagation(X, parameters, num_layers, last_act_fnct=last_act_fnct)
 
+        
         # Cost function. Inputs: "A_L, Y, parameters". Outputs: "cost".
-        cost = compute_cost(A_L, Y, parameters, last_act_fnct=last_act_fnct) #+ cost_regularization(num_examples,num_layers,parameters,lambda_param=0.5)
-        costs[i] = cost
+        cost = compute_cost(A_L, Y, parameters, last_act_fnct=last_act_fnct) 
         
         # Backpropagation. Inputs: "parameters, cache, X, Y". Outputs: "grads".
         grads = backward_propagation(parameters, num_layers, cache, X, Y, last_act_fnct=last_act_fnct)
+        grads = clip_gradients(grads)
     
         # Gradient descent parameter update. Inputs: "parameters, grads". Outputs: "parameters".
         if opt_fnct == "adam":
@@ -343,19 +410,42 @@ def nn_model(
         else:
             parameters = update_parameters(parameters, grads, num_layers, learning_rate=learning_rate)
         
-        if print_cost and i % 1000 == 0:
-            print("Cost after iteration %i: %f" %(i+1, cost))
-            # print(parameters)
-            # print(cache)
-            # print(grads)
-            # print("\n\n")
+        # Apply regularization 
+        cost_reg, param_reg = l2_regularization(num_examples, num_layers, parameters, lambda_param, learning_rate)
+        cost = cost + cost_reg
+        costs[i] = cost
+        for param in param_reg:
+            parameters[param] -= param_reg[param]
+
+        # Printing costs
+        if print_cost and i % print_cost == 0:
+            print("Cost after iteration "+str(i+1)+" : "+str(repr(cost)))
+            
+        # More prints for debugging
+        if math.isnan(cost) or cost == np.nan:
+            print("\nCost is NaN for iteration "+str(i+1)+"!")
+            print("A_L : min = "+str(np.min(A_L))+", max = "+str(np.max(A_L)))
+            print("A_L-1 : min = "+str(np.min(cache["A"+str(num_layers-1)]))+", max = "+str(np.max(cache["A"+str(num_layers-1)])))
+
+            print("Z"+str(num_layers)+" : min = "+str(np.min(cache["Z"+str(num_layers)]))+", max = "+str(np.max(cache["Z"+str(num_layers)])))
+            print("W"+str(num_layers)+" : min = "+str(np.min(parameters["W"+str(num_layers)]))+", max = "+str(np.max(parameters["W"+str(num_layers)])))
+            print("b"+str(num_layers)+" : min = "+str(np.min(parameters["b"+str(num_layers)]))+", max = "+str(np.max(parameters["b"+str(num_layers)])))
+            print("dW"+str(num_layers)+" : min = "+str(np.min(grads["dW"+str(num_layers)]))+", max = "+str(np.max(grads["dW"+str(num_layers)])))
+            print("db"+str(num_layers)+" : min = "+str(np.min(grads["db"+str(num_layers)]))+", max = "+str(np.max(grads["db"+str(num_layers)])))
+            
+            cost_is_nan = True
     
     print("Cost after all iterations : "+str(cost)+"\n")
 
     if opt_fnct == "adam":
-        return {"parameters": parameters, "adam_params":adam_params}, costs
+        all_params = {"parameters": parameters, "adam_params":adam_params}
     else:
-        return {"parameters":parameters}, costs
+        all_params = {"parameters": parameters}
+
+    if model_file and not cost_is_nan:
+        np.save(model_file, {**all_params, "costs":costs})
+
+    return all_params, costs
 
 def predict(parameters, X, num_layers, last_act_fnct="sigmoid"):
     """
